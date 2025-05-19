@@ -155,7 +155,7 @@ def simplify(n, d):
     return int(n/p), int(d/p)
 
 #Used as an argument of rational_op to specify operation type
-operations = Enum("Operations", [("ADD", 1), ("MULT", 2), ("DIV", 3)])
+operations = Enum("Operations", [("ADD", 1), ("MULT", 2), ("DIV", 3), ("SUB", 4)])
 
 
 def rational_op(num1:str, num2:str, op_type:operations):
@@ -167,9 +167,10 @@ def rational_op(num1:str, num2:str, op_type:operations):
     #If it's not a fraction we still treat it as one with a denominator of 1
     else: n1 = int(num1); d1 = 1
     if ("\\" in num2): n2, d2 = extract_nums(num2)
-    else: n2 = int(num2); d2 = 1        
+    else: n2 = int(num2); d2 = 1
+    if(op_type == operations.SUB): n2 = -n2
     match op_type:
-        case operations.ADD:
+        case operations.ADD | operations.SUB:
             n1 += n2*lcm(d1, d2)
             d1 = lcm(d1, d2)
         case operations.MULT:
@@ -186,12 +187,64 @@ def rational_op(num1:str, num2:str, op_type:operations):
 
     return res
 
+def compare_rational(n1:str, n2:str):
+    num1:int; num2:int; den1:int; den2:int
+    num1,den1 = extract_nums(n1)
+    num2, den2 = extract_nums(n2)
+    return num2/den2 - num1/den1
+
+
+def pivot(t:list[list[str]], row:int, col:int):
+    for i in range(len(t[0])):
+        t[0][i] = rational_op(t[0][i], rational_op(t[0][col], t[0][-1], operations.DIV), operations.SUB)
+
+    for i in range(1, row):
+        for j in range(len(t[i])):
+            t[i][j] = rational_op(t[i][j], rational_op(t[i][-1], t[row][j], operations.DIV), operations.SUB)
+
+    for i in range(len(t[row])): t[row][i] = rational_op(t[row][i], t[row][-1], operations.DIV)
+    
+    for i in range(row + 1, len(t)):
+        for j in range(len(t[i])):
+            t[i][j] = rational_op(t[i][j], rational_op(t[i][-1], t[row][j], operations.DIV), operations.SUB)
+
+
+def symplex(t:list[list[str]], base:list[tuple[int, int]]):
+    cur_base:list[tuple[int, int]] = list(base)
+    res:list[tuple[int, int]] = []
+    opt:bool = False
+    while(not opt):
+        opt = True
+        for i in range(len(t)-1):
+            if (compare_rational(t[0][i], "0") < 1): opt = False
+        if(opt): break
+        col:int = 0
+        min:str = "0"
+        for i in range(len(t[0])):
+            if compare_rational(t[0][i], min) < 0: 
+                min = t[0][i]
+                col = i
+        row:int = 0
+        for i in range(len(t)):
+            d:str = rational_op(t[i][col],t[i][-1], operations.DIV)
+            if (compare_rational(d, min) < 0):
+                min = d
+                row = i
+        #Update base
+        for i in range(len(cur_base)):
+            if cur_base[i][0] == row:
+                cur_base[i] = (row, col)
+                break
+        
+        pivot(t, row, col)
+        
+    return cur_base
 
 def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
     "Solve the associated aritificial problem and return a valid base"
-    res:list[tuple[int,int]] = []
+    art_base:list[tuple[int,int]] = []
     copy:list[list[str]] = list(t)
-    res = list(inBase)
+    art_base = list(inBase)
 
     for i in range(len(inBase), len(t)-1):
         for j in range(len(copy)):
@@ -201,29 +254,31 @@ def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
     j:int = 0
     for i in range(1, len(copy)):
         dup:bool = False
-        for t3 in res:
+        for t3 in art_base:
             if i == t3[0]:
                 dup = True
                 break
         if not dup:
-            res.append((i, len(t)-1+j))
-            copy[res[-1][0]][res[-1][1]] = "1"
-            copy[0][res[-1][1]]="1"
+            art_base.append((i, len(t)-1+j))
+            copy[art_base[-1][0]][art_base[-1][1]] = "1"
+            copy[0][art_base[-1][1]]="1"
             j+=1
     
     for i in range(1, len(t[0])):
         for j in range(len(t)):
-            copy[0][j] = rational_op(copy[0][j], copy[i][j], operations.ADD)
+            copy[0][j] = rational_op(copy[0][j], copy[i][j], operations.SUB)
+
+    art_base = symplex(copy, art_base)
         
-    return res
+    return copy
 
 
-def find_base(t:list[list[str]]):
+def solve(t:list[list[str]]):
     "Find a valid base for the given tableau"
     base:list[tuple[int, int]] = []
     #First off check if any of the pre-existing variables are part of a valid base
     id_cols = find_id(t)
     if (len(id_cols) == len(t)-1): base = id_cols
     #If there aren't enough then solve the associated artificial problem to find the rest
-    else: base = solve_artificial(t, id_cols)
-    return base
+    else: return solve_artificial(t, id_cols)
+    return symplex(t, base)
