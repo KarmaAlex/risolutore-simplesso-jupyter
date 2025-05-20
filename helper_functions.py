@@ -135,7 +135,7 @@ def find_id(t:list[list[str]]):
     return cols
 
 #Pattern that extracts numbers from the latex format \\frac{x}{y}
-num_extract_pattern = re.compile(".*\\{([0-9]*)\\}\\s?\\{([1-9]*)\\}$")
+num_extract_pattern = re.compile(".*\\{([0-9]*)\\}\\s?\\{([0-9]*)\\}$")
 def extract_nums(string:str):
     "Extract numbers from a Latex formatted fraction string"
     n:int; d:int
@@ -146,17 +146,16 @@ def extract_nums(string:str):
         d = int(match.groups()[1])
         if string[:1] == "-" : n = -n
         return n, d
-    return 0, 0
+    return int(string), 1
 
 
 def simplify(n, d):
     "Divide two values by their greatest common denominator"
-    p = gcd(n, d)
+    p = gcd(abs(n), abs(d))
     return int(n/p), int(d/p)
 
 #Used as an argument of rational_op to specify operation type
 operations = Enum("Operations", [("ADD", 1), ("MULT", 2), ("DIV", 3), ("SUB", 4)])
-
 
 def rational_op(num1:str, num2:str, op_type:operations):
     "Operations between rational numbers"
@@ -172,6 +171,7 @@ def rational_op(num1:str, num2:str, op_type:operations):
     match op_type:
         case operations.ADD | operations.SUB:
             n1 += n2*lcm(d1, d2)
+            #print("lcm between " + repr(d1) + "and " + repr(d2) + "is " + repr(lcm(d1, d2)))
             d1 = lcm(d1, d2)
         case operations.MULT:
             n1*=n2
@@ -179,17 +179,25 @@ def rational_op(num1:str, num2:str, op_type:operations):
         case operations.DIV:
             n1*=d2
             d1*=n2
+            if d1 == 0:
+                d1 = 1
+                n1 = 0
+            if d1 < 0: 
+                n1 = -n1
+                d1 = -d1
+    #print("Operation of type: " + repr(op_type) + "between: " + num1 + " and " + num2 + " resulted in " + repr(n1) + " over " + repr(d1))
     n1, d1 = simplify(n1, d1)
     #Output result as a formatted string if it is a fraction or as the number itself
-    res = r"\\frac{" + repr(abs(n1)) + r"}{" + repr(d1) + r"}" if d1 != 1 else repr(abs(n1))
+    res = r"\frac{" + repr(abs(n1)) + r"}{" + repr(d1) + r"}" if d1 != 1 else repr(abs(n1))
     #Make negative if answer is < 0
     if n1 < 0: res = "-" + res[0:]
 
     return res
 
+
 def compare_rational(n1:str, n2:str):
     num1:int; num2:int; den1:int; den2:int
-    num1,den1 = extract_nums(n1)
+    num1, den1 = extract_nums(n1)
     num2, den2 = extract_nums(n2)
     return num2/den2 - num1/den1
 
@@ -201,22 +209,23 @@ def pivot(t:list[list[str]], row:int, col:int):
     for i in range(1, row):
         for j in range(len(t[i])):
             t[i][j] = rational_op(t[i][j], rational_op(t[i][-1], t[row][j], operations.DIV), operations.SUB)
-
-    for i in range(len(t[row])): t[row][i] = rational_op(t[row][i], t[row][-1], operations.DIV)
     
     for i in range(row + 1, len(t)):
         for j in range(len(t[i])):
             t[i][j] = rational_op(t[i][j], rational_op(t[i][-1], t[row][j], operations.DIV), operations.SUB)
+    
+    for i in range(len(t[row])): t[row][i] = rational_op(t[row][i], t[row][-1], operations.DIV)
 
 
 def symplex(t:list[list[str]], base:list[tuple[int, int]]):
     cur_base:list[tuple[int, int]] = list(base)
-    res:list[tuple[int, int]] = []
     opt:bool = False
+    #print("before pivot: "+ repr(t))
     while(not opt):
         opt = True
         for i in range(len(t)-1):
-            if (compare_rational(t[0][i], "0") < 1): opt = False
+            if (compare_rational(t[0][i], "0") < 0):
+                opt = False
         if(opt): break
         col:int = 0
         min:str = "0"
@@ -237,8 +246,23 @@ def symplex(t:list[list[str]], base:list[tuple[int, int]]):
                 break
         
         pivot(t, row, col)
+        #print("after pivot: " + repr(t))
         
-    return cur_base
+    return t, cur_base
+
+
+def canonize(t:list[list[str]], base:list[tuple[int, int]]):
+    skip:bool = False
+    #print(base)
+    for i in range(len(t[0])):
+        skip = False
+        for b in base:
+            if b[1] == i: skip = True
+        if skip: continue
+        for j in range(1, len(t)):
+            #print(t[j][i])
+            t[0][i] = rational_op(t[0][i], t[j][i], operations.SUB)
+
 
 def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
     "Solve the associated aritificial problem and return a valid base"
@@ -264,11 +288,9 @@ def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
             copy[0][art_base[-1][1]]="1"
             j+=1
     
-    for i in range(1, len(t[0])):
-        for j in range(len(t)):
-            copy[0][j] = rational_op(copy[0][j], copy[i][j], operations.SUB)
+    canonize(copy, art_base)
 
-    art_base = symplex(copy, art_base)
+    copy, art_base = symplex(copy, art_base)
         
     return copy
 
@@ -281,4 +303,5 @@ def solve(t:list[list[str]]):
     if (len(id_cols) == len(t)-1): base = id_cols
     #If there aren't enough then solve the associated artificial problem to find the rest
     else: return solve_artificial(t, id_cols)
+    canonize(t, base)
     return symplex(t, base)
