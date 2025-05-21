@@ -170,9 +170,12 @@ def rational_op(num1:str, num2:str, op_type:operations):
     if(op_type == operations.SUB): n2 = -n2
     match op_type:
         case operations.ADD | operations.SUB:
-            n1 += n2*lcm(d1, d2)
+            #print(lcm(d1, d2)/n2 if n2 != 0 else 0)
+            n1 = (n1*int(lcm(d1, d2)/abs(d1))) + (n2*int(lcm(d1, d2)/abs(d2)))
             #print("lcm between " + repr(d1) + "and " + repr(d2) + "is " + repr(lcm(d1, d2)))
             d1 = lcm(d1, d2)
+            #print("num " + repr(n1) + "den: " + repr(d1))
+            
         case operations.MULT:
             n1*=n2
             d1*=d2
@@ -185,7 +188,7 @@ def rational_op(num1:str, num2:str, op_type:operations):
             if d1 < 0: 
                 n1 = -n1
                 d1 = -d1
-    #print("Operation of type: " + repr(op_type) + "between: " + num1 + " and " + num2 + " resulted in " + repr(n1) + " over " + repr(d1))
+    #if (num1 != "0" or num2 != "0"): print("Operation of type: " + repr(op_type) + " between: " + num1 + " and " + num2 + " resulted in " + repr(n1) + " over " + repr(d1))
     n1, d1 = simplify(n1, d1)
     #Output result as a formatted string if it is a fraction or as the number itself
     res = r"\frac{" + repr(abs(n1)) + r"}{" + repr(d1) + r"}" if d1 != 1 else repr(abs(n1))
@@ -199,22 +202,33 @@ def compare_rational(n1:str, n2:str):
     num1:int; num2:int; den1:int; den2:int
     num1, den1 = extract_nums(n1)
     num2, den2 = extract_nums(n2)
-    return num2/den2 - num1/den1
+    return  num1/den1 - num2/den2
 
 
 def pivot(t:list[list[str]], row:int, col:int):
+    mult:str = rational_op(t[0][col], t[row][col], operations.DIV)
     for i in range(len(t[0])):
-        t[0][i] = rational_op(t[0][i], rational_op(t[0][col], t[0][-1], operations.DIV), operations.SUB)
+        t[0][i] = rational_op(t[0][i], 
+                              rational_op(t[row][i], mult, operations.MULT), 
+                operations.SUB)
+        #print("subtracting " + repr(rational_op(t[row][i], mult, operations.MULT)))
 
     for i in range(1, row):
+        mult = rational_op(t[i][col], t[row][col], operations.DIV)
+        #print(mult)
         for j in range(len(t[i])):
-            t[i][j] = rational_op(t[i][j], rational_op(t[i][-1], t[row][j], operations.DIV), operations.SUB)
+            t[i][j] = rational_op(t[i][j], rational_op(t[row][j], mult, operations.MULT), operations.SUB)
+            #print("subtracting " + rational_op(t[row][j], mult, operations.MULT))
     
     for i in range(row + 1, len(t)):
+        mult = rational_op(t[i][col], t[row][col], operations.DIV)
+        #print(mult)
         for j in range(len(t[i])):
-            t[i][j] = rational_op(t[i][j], rational_op(t[i][-1], t[row][j], operations.DIV), operations.SUB)
+            t[i][j] = rational_op(t[i][j], rational_op(t[row][j], mult, operations.MULT), operations.SUB)
     
-    for i in range(len(t[row])): t[row][i] = rational_op(t[row][i], t[row][-1], operations.DIV)
+    for i in range(len(t[row])):
+        mult = t[row][-1]
+        t[row][i] = rational_op(t[row][i], mult, operations.DIV)
 
 
 def symplex(t:list[list[str]], base:list[tuple[int, int]]):
@@ -230,27 +244,29 @@ def symplex(t:list[list[str]], base:list[tuple[int, int]]):
         col:int = 0
         min:str = "0"
         for i in range(len(t[0])):
-            if compare_rational(t[0][i], min) < 0: 
+            if compare_rational(t[0][i], min) < 0:
                 min = t[0][i]
                 col = i
+        min = "100000000" #TODO:Find a better solution
         row:int = 0
-        for i in range(len(t)):
-            d:str = rational_op(t[i][col],t[i][-1], operations.DIV)
-            if (compare_rational(d, min) < 0):
-                min = d
-                row = i
+        for i in range(1, len(t)):
+            if t[i][col] != "0":
+                d:str = rational_op(t[i][-1],t[i][col], operations.DIV)
+                if (compare_rational(d, min) <= 0):
+                    min = d
+                    row = i
         #Update base
         for i in range(len(cur_base)):
             if cur_base[i][0] == row:
                 cur_base[i] = (row, col)
                 break
-        
+        #print("Pivot in (" + repr(row) + "," + repr(col) + ")")
         pivot(t, row, col)
         #print("after pivot: " + repr(t))
         
     return t, cur_base
 
-
+#TODO: Check if tableau is already canonized
 def canonize(t:list[list[str]], base:list[tuple[int, int]]):
     skip:bool = False
     #print(base)
@@ -292,7 +308,7 @@ def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
 
     copy, art_base = symplex(copy, art_base)
         
-    return copy
+    return copy, art_base
 
 
 def solve(t:list[list[str]]):
@@ -303,5 +319,6 @@ def solve(t:list[list[str]]):
     if (len(id_cols) == len(t)-1): base = id_cols
     #If there aren't enough then solve the associated artificial problem to find the rest
     else: return solve_artificial(t, id_cols)
-    canonize(t, base)
+    #canonize(t, base)
+    #print(t)
     return symplex(t, base)
