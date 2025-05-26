@@ -109,29 +109,28 @@ def output_tableau(t:list[list[str]]):
 
 
 def find_id(t:list[list[str]]):
-    #Finds identity matrix or columns that would be part of one
+    "Finds identity matrix or columns that would be part of one"
     cols:list[tuple[int, int]] = []
     for i in range(len(t[0])-1):
-        if t[0][i] == "0":
-            j:int = 1
-            id_col:bool = True
-            loc_one:tuple[int, int] | None = None
-            while (j<len(t) and id_col):
-                if (not (t[j][i] == "1" or t[j][i] == "0")): 
-                    id_col = False
+        j:int = 1
+        id_col:bool = True
+        loc_one:tuple[int, int] | None = None
+        while (j<len(t) and id_col):
+            if (not (t[j][i] == "1" or t[j][i] == "0")): 
+                id_col = False
+                break
+            #When we find a candidate we save the coordinates of the 1 as a tuple
+            elif (t[j][i] == "1" and loc_one is None): loc_one = (j,i)
+            elif (t[j][i] == "1" and loc_one is not None): id_col = False
+            j += 1
+        #Once we know that the 1 we found is a valid candidate we check if we have already found one in the same vertical position
+        if(id_col and loc_one is not None):
+            dup = False
+            for c in cols:
+                if c[0] == loc_one[0]: 
+                    dup = True
                     break
-                #When we find a candidate we save the coordinates of the 1 as a tuple
-                elif (t[j][i] == "1" and loc_one is None): loc_one = (j,i)
-                elif (t[j][i] == "1" and loc_one is not None): id_col = False
-                j += 1
-            #Once we know that the 1 we found is a valid candidate we check if we have already found one in the same vertical position
-            if(id_col and loc_one is not None):
-                dup = False
-                for c in cols:
-                    if c[0] == loc_one[0]: 
-                        dup = True
-                        break
-                if not dup : cols.append(loc_one)
+            if not dup : cols.append(loc_one)
     return cols
 
 #Pattern that extracts numbers from the latex format \\frac{x}{y}
@@ -268,18 +267,26 @@ def symplex(t:list[list[str]], base:list[tuple[int, int]]):
 
 #TODO: Check if tableau is already canonized
 def canonize(t:list[list[str]], base:list[tuple[int, int]]):
+    print(base)
     skip:bool = False
+    inBase:bool = False
+    k:int = 0
     #print(base)
     for i in range(len(t[0])):
         skip = False
+        inBase = False
         for b in base:
-            if b[1] == i: skip = True
-        if skip: continue
-        for j in range(1, len(t)):
+            if b[1] == i: 
+                inBase = True
+                k = base.index(b) 
+            if inBase and t[0][b[1]] == "0": skip = True
+        if not inBase or skip: continue
+        mult:str = t[0][base[k][1]]
+        for j in range(len(t[0])):
             #print(t[j][i])
-            t[0][i] = rational_op(t[0][i], t[j][i], operations.SUB)
+            t[0][j] = rational_op(t[0][j], rational_op(t[base[k][0]][j], mult, operations.MULT), operations.SUB)
 
-
+#TODO: fix this method, created matrix does not match expected result
 def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
     "Solve the associated aritificial problem and return a valid base"
     art_base:list[tuple[int,int]] = []
@@ -304,9 +311,13 @@ def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
             copy[0][art_base[-1][1]]="1"
             j+=1
     
+    return copy, art_base
+
     canonize(copy, art_base)
 
-    copy, art_base = symplex(copy, art_base)
+    return copy, art_base
+
+    #copy, art_base = symplex(copy, art_base)
         
     return copy, art_base
 
@@ -319,6 +330,7 @@ def solve(t:list[list[str]]):
     if (len(id_cols) == len(t)-1): base = id_cols
     #If there aren't enough then solve the associated artificial problem to find the rest
     else: return solve_artificial(t, id_cols)
-    #canonize(t, base)
+    canonize(t, base)
+    #return t, base
     #print(t)
     return symplex(t, base)
