@@ -2,6 +2,7 @@ import re
 from typing import Optional
 from enum import Enum
 from math import gcd, lcm
+from copy import deepcopy
 
 #Pattern to match variables with their associated multipliers
 var_pattern:re.Pattern = re.compile("(?:[+]?(-?[^x]*)x_([^-+=]*))")
@@ -166,14 +167,11 @@ def rational_op(num1:str, num2:str, op_type:operations):
     else: n1 = int(num1); d1 = 1
     if ("\\" in num2): n2, d2 = extract_nums(num2)
     else: n2 = int(num2); d2 = 1
-    if(op_type == operations.SUB): n2 = -n2
+    if(op_type == operations.SUB): n2 = 0 - n2
     match op_type:
         case operations.ADD | operations.SUB:
-            #print(lcm(d1, d2)/n2 if n2 != 0 else 0)
             n1 = (n1*int(lcm(d1, d2)/abs(d1))) + (n2*int(lcm(d1, d2)/abs(d2)))
-            #print("lcm between " + repr(d1) + "and " + repr(d2) + "is " + repr(lcm(d1, d2)))
             d1 = lcm(d1, d2)
-            #print("num " + repr(n1) + "den: " + repr(d1))
             
         case operations.MULT:
             n1*=n2
@@ -187,7 +185,6 @@ def rational_op(num1:str, num2:str, op_type:operations):
             if d1 < 0: 
                 n1 = -n1
                 d1 = -d1
-    #if (num1 != "0" or num2 != "0"): print("Operation of type: " + repr(op_type) + " between: " + num1 + " and " + num2 + " resulted in " + repr(n1) + " over " + repr(d1))
     n1, d1 = simplify(n1, d1)
     #Output result as a formatted string if it is a fraction or as the number itself
     res = r"\frac{" + repr(abs(n1)) + r"}{" + repr(d1) + r"}" if d1 != 1 else repr(abs(n1))
@@ -210,46 +207,42 @@ def pivot(t:list[list[str]], row:int, col:int):
         t[0][i] = rational_op(t[0][i], 
                               rational_op(t[row][i], mult, operations.MULT), 
                 operations.SUB)
-        #print("subtracting " + repr(rational_op(t[row][i], mult, operations.MULT)))
 
     for i in range(1, row):
         mult = rational_op(t[i][col], t[row][col], operations.DIV)
-        #print(mult)
         for j in range(len(t[i])):
             t[i][j] = rational_op(t[i][j], rational_op(t[row][j], mult, operations.MULT), operations.SUB)
-            #print("subtracting " + rational_op(t[row][j], mult, operations.MULT))
     
     for i in range(row + 1, len(t)):
         mult = rational_op(t[i][col], t[row][col], operations.DIV)
-        #print(mult)
         for j in range(len(t[i])):
             t[i][j] = rational_op(t[i][j], rational_op(t[row][j], mult, operations.MULT), operations.SUB)
     
+    mult = t[row][col]
     for i in range(len(t[row])):
-        mult = t[row][-1]
         t[row][i] = rational_op(t[row][i], mult, operations.DIV)
 
 
 def symplex(t:list[list[str]], base:list[tuple[int, int]]):
     cur_base:list[tuple[int, int]] = list(base)
     opt:bool = False
-    #print("before pivot: "+ repr(t))
     while(not opt):
         opt = True
         for i in range(len(t)-1):
             if (compare_rational(t[0][i], "0") < 0):
                 opt = False
+                break
         if(opt): break
         col:int = 0
         min:str = "0"
-        for i in range(len(t[0])):
+        for i in range(len(t[0])-1):
             if compare_rational(t[0][i], min) < 0:
                 min = t[0][i]
                 col = i
         min = "100000000" #TODO:Find a better solution
         row:int = 0
         for i in range(1, len(t)):
-            if t[i][col] != "0":
+            if compare_rational(t[i][col], "0") > 0:
                 d:str = rational_op(t[i][-1],t[i][col], operations.DIV)
                 if (compare_rational(d, min) <= 0):
                     min = d
@@ -259,67 +252,86 @@ def symplex(t:list[list[str]], base:list[tuple[int, int]]):
             if cur_base[i][0] == row:
                 cur_base[i] = (row, col)
                 break
-        #print("Pivot in (" + repr(row) + "," + repr(col) + ")")
         pivot(t, row, col)
-        #print("after pivot: " + repr(t))
         
     return t, cur_base
 
-#TODO: Check if tableau is already canonized
+
 def canonize(t:list[list[str]], base:list[tuple[int, int]]):
-    print(base)
-    skip:bool = False
+    #print(base)
     inBase:bool = False
     k:int = 0
     #print(base)
     for i in range(len(t[0])):
-        skip = False
         inBase = False
         for b in base:
-            if b[1] == i: 
+            if b[1] == i and t[0][b[1]] != "0": 
                 inBase = True
                 k = base.index(b) 
-            if inBase and t[0][b[1]] == "0": skip = True
-        if not inBase or skip: continue
+                break
+        if not inBase: continue
         mult:str = t[0][base[k][1]]
         for j in range(len(t[0])):
             #print(t[j][i])
             t[0][j] = rational_op(t[0][j], rational_op(t[base[k][0]][j], mult, operations.MULT), operations.SUB)
 
-#TODO: fix this method, created matrix does not match expected result
+
 def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
     "Solve the associated aritificial problem and return a valid base"
     art_base:list[tuple[int,int]] = []
-    copy:list[list[str]] = list(t)
+    t_copy:list[list[str]] = deepcopy(t)
     art_base = list(inBase)
 
+    for i in range(len(t_copy[0])):
+        t_copy[0][i] = "0"
+
     for i in range(len(inBase), len(t)-1):
-        for j in range(len(copy)):
-            copy[j].append(copy[j][-1])
-            copy[j][-2] = "0"
+        for j in range(len(t_copy)):
+            t_copy[j].append(t_copy[j][-1])
+            t_copy[j][-2] = "0"
 
     j:int = 0
-    for i in range(1, len(copy)):
+    for i in range(1, len(t_copy)):
         dup:bool = False
         for t3 in art_base:
             if i == t3[0]:
                 dup = True
                 break
         if not dup:
-            art_base.append((i, len(t)-1+j))
-            copy[art_base[-1][0]][art_base[-1][1]] = "1"
-            copy[0][art_base[-1][1]]="1"
+            art_base.append((i, len(t_copy[0])-2-j))
+            t_copy[art_base[-1][0]][art_base[-1][1]] = "1"
+            t_copy[0][art_base[-1][1]]="1"
             j+=1
-    
-    return copy, art_base
 
-    canonize(copy, art_base)
+    canonize(t_copy, art_base)
 
-    return copy, art_base
+    t_copy, art_base = symplex(t_copy, art_base)
 
-    #copy, art_base = symplex(copy, art_base)
-        
-    return copy, art_base
+    art_base = find_id(t_copy)
+
+    #TODO: Add method to pivot in case artificial variables are in base
+    col:int = 0
+    row:int = 0
+    for b in art_base:
+        if b[1]>len(t)-1:
+            for i in range(len(t[0])):
+                if compare_rational(t_copy[b[0]][i], "0") != 0:
+                    row = b[0]
+                    col = i
+                    break
+            pivot(t_copy, row, col)
+            art_base[art_base.index(b)] = (row, col)
+
+    for i in range(1, len(t)):
+        for j in range(len(t[0])-1):
+            t[i][j]=t_copy[i][j]
+        t[i][-1]=t_copy[i][-1]
+
+    canonize(t, art_base)
+
+    t, art_base = symplex(t, art_base)
+
+    return t, art_base
 
 
 def solve(t:list[list[str]]):
@@ -331,6 +343,4 @@ def solve(t:list[list[str]]):
     #If there aren't enough then solve the associated artificial problem to find the rest
     else: return solve_artificial(t, id_cols)
     canonize(t, base)
-    #return t, base
-    #print(t)
     return symplex(t, base)
