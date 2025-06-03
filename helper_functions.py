@@ -3,6 +3,7 @@ from typing import Optional
 from enum import Enum
 from math import gcd, lcm
 from copy import deepcopy
+from IPython.display import HTML, display
 
 #Pattern to match variables with their associated multipliers
 var_pattern:re.Pattern = re.compile("(?:[+]?(-?[^x]*)x_([^-+=]*))")
@@ -106,7 +107,7 @@ def output_tableau(t:list[list[str]]):
         out += "</tr>"
     out += "</table>"
     
-    return out
+    display(HTML(out))
 
 
 def find_id(t:list[list[str]]):
@@ -134,6 +135,7 @@ def find_id(t:list[list[str]]):
             if not dup : cols.append(loc_one)
     return cols
 
+
 #Pattern that extracts numbers from the latex format \\frac{x}{y}
 num_extract_pattern = re.compile(".*\\{([0-9]*)\\}\\s?\\{([0-9]*)\\}$")
 def extract_nums(string:str):
@@ -154,8 +156,10 @@ def simplify(n, d):
     p = gcd(abs(n), abs(d))
     return int(n/p), int(d/p)
 
-#Used as an argument of rational_op to specify operation type
+
 operations = Enum("Operations", [("ADD", 1), ("MULT", 2), ("DIV", 3), ("SUB", 4)])
+"Used as an argument of rational_op to specify operation type"
+
 
 def rational_op(num1:str, num2:str, op_type:operations):
     "Operations between rational numbers"
@@ -223,7 +227,7 @@ def pivot(t:list[list[str]], row:int, col:int):
         t[row][i] = rational_op(t[row][i], mult, operations.DIV)
 
 
-def symplex(t:list[list[str]], base:list[tuple[int, int]]):
+def symplex(t:list[list[str]], base:list[tuple[int, int]], verbose:bool):
     cur_base:list[tuple[int, int]] = list(base)
     opt:bool = False
     while(not opt):
@@ -253,11 +257,14 @@ def symplex(t:list[list[str]], base:list[tuple[int, int]]):
                 cur_base[i] = (row, col)
                 break
         pivot(t, row, col)
+        if verbose:
+            print(f"Pivot in {row+1},{col+1}")
+            output_tableau(t)
         
     return t, cur_base
 
 
-def canonize(t:list[list[str]], base:list[tuple[int, int]]):
+def canonize(t:list[list[str]], base:list[tuple[int, int]], verbose:bool):
     #print(base)
     inBase:bool = False
     k:int = 0
@@ -274,10 +281,14 @@ def canonize(t:list[list[str]], base:list[tuple[int, int]]):
         for j in range(len(t[0])):
             #print(t[j][i])
             t[0][j] = rational_op(t[0][j], rational_op(t[base[k][0]][j], mult, operations.MULT), operations.SUB)
+    if verbose:
+        print("Matrice canonizzata:") 
+        output_tableau(t)
 
 
-def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
+def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]], verbose:bool):
     "Solve the associated aritificial problem and return a valid base"
+    if verbose: print("Matrice identità non trovata, è necessario risolvere il problema artificiale associato")
     art_base:list[tuple[int,int]] = []
     t_copy:list[list[str]] = deepcopy(t)
     art_base = list(inBase)
@@ -303,13 +314,20 @@ def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
             t_copy[0][art_base[-1][1]]="1"
             j+=1
 
-    canonize(t_copy, art_base)
+    if verbose:    
+        print("Tableau associato al problema artificiale:")
+        output_tableau(t_copy)
 
-    t_copy, art_base = symplex(t_copy, art_base)
+    canonize(t_copy, art_base, verbose)
+
+    t_copy, art_base = symplex(t_copy, art_base, verbose)
 
     art_base = find_id(t_copy)
 
-    #TODO: Add method to pivot in case artificial variables are in base
+    if verbose:
+        print("Tableau corrispondente alla soluzione del problema artificiale:")
+        output_tableau(t_copy)
+
     col:int = 0
     row:int = 0
     for b in art_base:
@@ -327,20 +345,24 @@ def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]]):
             t[i][j]=t_copy[i][j]
         t[i][-1]=t_copy[i][-1]
 
-    canonize(t, art_base)
+    if verbose:
+        print("Tableau dopo aver rimosso tutte le variabili artificiali:")
+        output_tableau(t)
 
-    t, art_base = symplex(t, art_base)
+    canonize(t, art_base, verbose)
+
+    t, art_base = symplex(t, art_base, verbose)
 
     return t, art_base
 
 
-def solve(t:list[list[str]]):
+def solve(t:list[list[str]], verbose:bool):
     "Find a valid base for the given tableau"
     base:list[tuple[int, int]] = []
     #First off check if any of the pre-existing variables are part of a valid base
     id_cols = find_id(t)
     if (len(id_cols) == len(t)-1): base = id_cols
     #If there aren't enough then solve the associated artificial problem to find the rest
-    else: return solve_artificial(t, id_cols)
-    canonize(t, base)
-    return symplex(t, base)
+    else: return solve_artificial(t, id_cols, verbose)
+    canonize(t, base, verbose)
+    return symplex(t, base, verbose)
