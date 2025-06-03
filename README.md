@@ -9,6 +9,6 @@ Si può avviare come qualsiasi altro notebook jupyter, basta assicurarsi di aver
 
 Se non è installato fa parte di requirements.txt quindi basta eseguire `pip install -r requirements.txt` dalla cartella in cui si è clonato il progetto e poi avviare jupyter chiamando `jupyter notebook` sempre da linea di comando.
 
-Testato anche su VSCode.
+Si noti che su VSCode l'output latex non funziona per delle differenze nel modo di rendering, ho dato priorità a jupyter perché è il metodo consigliato di usare i notebook.
 ## Contribuzione
 Si accettano cambiamenti tramite pull request
