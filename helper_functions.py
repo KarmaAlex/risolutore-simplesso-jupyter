@@ -333,7 +333,7 @@ def solve_artificial(t:list[list[str]], inBase:list[tuple[int, int]], verbose:bo
     for b in art_base:
         if b[1]>len(t[0])-1:
             for i in range(len(t[0])):
-                if compare_rational(t_copy[b[0]][i], "0") == 0:
+                if compare_rational(t_copy[b[0]][i], "0") != 0:
                     row = b[0]
                     col = i
                     break
