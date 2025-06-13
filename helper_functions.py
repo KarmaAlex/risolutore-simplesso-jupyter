@@ -4,6 +4,7 @@ from enum import Enum
 from math import gcd, lcm
 from copy import deepcopy
 from IPython.display import HTML, display
+import sys
 
 #Pattern to match variables with their associated multipliers
 var_pattern:re.Pattern = re.compile("(?:[+]?(-?[^x]*)x_([^-+=]*))")
@@ -232,7 +233,7 @@ def symplex(t:list[list[str]], base:list[tuple[int, int]], verbose:bool):
     opt:bool = False
     while(not opt):
         opt = True
-        for i in range(len(t)-1):
+        for i in range(len(t[0])-1):
             if (compare_rational(t[0][i], "0") < 0):
                 opt = False
                 break
@@ -243,7 +244,7 @@ def symplex(t:list[list[str]], base:list[tuple[int, int]], verbose:bool):
             if compare_rational(t[0][i], min) < 0:
                 min = t[0][i]
                 col = i
-        min = "100000000" #TODO:Find a better solution
+        min = repr(sys.maxsize)
         row:int = 0
         for i in range(1, len(t)):
             if compare_rational(t[i][col], "0") > 0:
